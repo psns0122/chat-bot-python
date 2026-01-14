@@ -18,14 +18,14 @@
 #
 #
 # # FastAPI 관련
-# app = FastAPI()
+# backend = FastAPI()
 #
 # origins = [
 #     "http://localhost",
 #     "http://localhost:8080",
 # ]
 #
-# app.add_middleware(
+# backend.add_middleware(
 #     CORSMiddleware,
 #     allow_origins=origins,
 #     allow_credentials=True,
@@ -37,7 +37,7 @@
 #     sessionId: str
 #     message: str
 #
-# @app.post("/api/get-gemini")
+# @backend.post("/api/get-gemini")
 # def get_gemini(req: ChatRequest):
 #     # Gemini 호출
 #     response = client.models.generate_content(
@@ -66,12 +66,12 @@
 #     #
 #     # print(result.embeddings)
 #
-#     uvicorn.run(app, host="0.0.0.0", port=8080)
+#     uvicorn.run(backend, host="0.0.0.0", port=8080)
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.controller.ChattingController import router as chatting_router
+from backend.controller.ChattingController import router as chatting_router
 
 app = FastAPI()
 

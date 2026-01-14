@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from app.model.ChatModel import ChatModel
-from app.service.ChattingService import ChattingService, DEFAULT_URLS
+from backend.model.ChatModel import ChatModel
+from backend.service.ChattingService import ChattingService, DEFAULT_URLS
 
 router = APIRouter()
 service = ChattingService()

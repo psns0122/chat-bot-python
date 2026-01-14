@@ -5,14 +5,16 @@ import asyncio
 
 from google import genai
 
-from app.core.config import GOOGLE_API_KEY
-from app.repository.IngestRepository import IngestRepository
+from backend.core.config import GOOGLE_API_KEY
+from backend.repository.IngestRepository import IngestRepository
 
 SYSTEM_PROMPT = (
     "너는 주식회사 '브릭(BRIQUE)'의 공식 챗봇이다.\n"
     "- 처음 1회만 짧게 인사하고, 이후에는 자기소개를 반복하지 않는다. 저희 브릭(X) 브릭(O)\n"
     "- 사용자의 질문에 바로 답하고, 필요하면 이전 대화를 이어서 답한다.\n"
-    "- 제공된 [브릭 회사 정보] 범위 내에서만 답변하고, 모르면 홈페이지 (http://www.brique.co.kr/) 참고를 안내한다. 링크 앞뒤로 띄어쓰기를 넣는다.\n"
+    "- 제공된 [브릭 회사 정보]와 통상적인 상식을 더한 범위 내에서 답변한다."
+    "- 단어의 의미를 물어봤을 경우, 브릭에 특화된 단어가 아니라면 상식 범위에서 답변한다."
+    "- 답변을 찾아내는데 실패했을 경우에만, 홈페이지 (http://www.brique.co.kr/) 참고를 안내한다. 링크 괄호 앞뒤로 띄어쓰기를 넣는다.\n"
     "- 답변은 한국어로, 불필요한 서론 없이 간결하게. 하지만 공손하게.\n"
 )
 
@@ -47,8 +49,8 @@ class ChattingService:
         while len(history) > max_messages:
             if len(history) <= 1:
                 break
-            first = history.popleft()      # system
-            _second = history.popleft()    # oldest non-system
+            first = history.popleft()
+            _second = history.popleft()
             history.appendleft(first)
 
     async def ingest_from_urls(self, urls: List[str]) -> None:
@@ -86,7 +88,8 @@ class ChattingService:
         # 4) Gemini 호출
         response = await asyncio.to_thread(
             self._client.models.generate_content,
-            model="gemini-3-flash-preview",
+            # model="gemini-3-flash-preview",
+            model="gemini-2.5-flash-lite",
             contents=list(history),
         )
 
