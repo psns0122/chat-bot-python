@@ -1,2 +1,5 @@
 backend/.env
 */.env
+
+data/*.txt
+data/*.pdf
