@@ -41,8 +41,8 @@ class ChattingService:
 
         # Splitter / Embeddings / Vectorstore
         self._splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=200,
+            chunk_size=300,
+            chunk_overlap=100,
             length_function=len
         )
         self._embeddings = HuggingFaceEmbeddings(
@@ -54,7 +54,7 @@ class ChattingService:
             persist_directory=CHROMA_DIR,
             embedding_function=self._embeddings,
         )
-        self._retriever = self._vectorstore.as_retriever(search_kwargs={"k": 4})
+        self._retriever = self._vectorstore.as_retriever(search_kwargs={"k": 20})
 
     def _marked(self, path: str) -> bool:
         return os.path.exists(path)
@@ -108,7 +108,7 @@ class ChattingService:
                     persist_directory=CHROMA_DIR,
                     embedding_function=self._embeddings,
                 )
-                self._retriever = self._vectorstore.as_retriever(search_kwargs={"k": 4})
+                self._retriever = self._vectorstore.as_retriever(search_kwargs={"k": 20})
 
             # 1) 무엇을 넣어야 하는지 판단(마커 기반)
             need_file = force_rebuild or (not self._marked(FILE_MARK))
@@ -131,7 +131,7 @@ class ChattingService:
 
                 pdf_loader = DirectoryLoader(
                     file_dir,
-                    glob="*.pdf",
+                    glob="**/*.pdf",
                     loader_cls=PyPDFLoader
                 )
                 pdf_docs = pdf_loader.load()
@@ -159,7 +159,7 @@ class ChattingService:
                 else:
                     print("[INGEST] file empty (경로/파일 확인 필요)")
 
-    def _format_context(self, docs: List[Document], max_chars: int = 6000) -> str:
+    def _format_context(self, docs: List[Document], max_chars: int = 3000) -> str:
         # 너무 길어지면 모델이 컨텍스트를 못 쓰므로 제한
         parts: List[str] = []
         total = 0
@@ -209,7 +209,7 @@ class ChattingService:
             model="gemini-2.5-flash-lite",
             contents=list(history),
             config=types.GenerateContentConfig(
-                temperature=0.5,
+                temperature=0.8,
                 top_p=0.95,
                 max_output_tokens=800
             ),
@@ -247,7 +247,7 @@ class ChattingService:
             model="gemini-2.5-flash-lite",
             contents=list(history),
             config=types.GenerateContentConfig(
-                temperature=0.5,
+                temperature=0.8,
                 top_p=0.95,
                 max_output_tokens=800
             ),
