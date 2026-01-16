@@ -9,7 +9,6 @@ from google import genai
 from google.genai import types
 
 from backend.core.config import GOOGLE_API_KEY
-
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
