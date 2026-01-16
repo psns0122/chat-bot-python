@@ -1,5 +1,5 @@
 backend/.env
 */.env
 
-*/data/*.txt
-*/data/*.pdf
+*/data/**/*.txt
+*/data/**/*.pdf

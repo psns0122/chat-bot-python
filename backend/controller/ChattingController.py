@@ -1,4 +1,3 @@
-import os
 from fastapi import APIRouter
 from backend.model.ChatModel import ChatModel
 from backend.service.ChattingService import ChattingService, FILE_DIR
@@ -8,7 +7,6 @@ service = ChattingService()
 
 @router.post("/api/ingest")
 async def ingest():
-    # 이미 DB 있으면 자동 skip
     await service.ingest(FILE_DIR, force_rebuild=False)
     return "데이터 적재 성공!"
 

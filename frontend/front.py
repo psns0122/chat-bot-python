@@ -65,13 +65,13 @@ if prompt := st.chat_input("질문을 입력하세요"):
                 # 3. 화면에는 추출한 텍스트만 출력
                 st.markdown(bot_text)
 
-                # 3-1. 응답의 근거자료도 표로 만들어서 출력
-                st.subheader("근거 자료")
+                # 3-1. 응답의 참고자료도 표로 만들어서 출력
+                st.subheader("참고 자료")
                 sources = result_json.get("sources", [])
                 if sources:
                     st.dataframe(sources, use_container_width=True)
                 else:
-                    st.write("(근거 자료 탐색 실패)")
+                    st.write("(참고 자료 탐색 실패)")
 
                 # 4. 세션 저장소에도 텍스트만 저장
                 st.session_state.messages.append({"role": "assistant", "content": bot_text})
