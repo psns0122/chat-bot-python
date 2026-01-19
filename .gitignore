@@ -3,3 +3,5 @@ backend/.env
 
 */data/**/*.txt
 */data/**/*.pdf
+
+*/data/chroma_db
