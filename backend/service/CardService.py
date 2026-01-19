@@ -8,7 +8,6 @@ from typing import Dict, Any, List, Optional, Tuple
 
 from langchain_core.documents import Document
 
-
 def _safe_stem(name: str) -> str:
     stem = os.path.splitext(os.path.basename(name))[0]
     stem = stem.strip()
@@ -47,23 +46,17 @@ class CardRecord:
     description: str
     expected_q: List[str]
     keywords: List[str]
-    meta_source: str              # metadata txt 경로(상대/표시용)
-    content_source: Optional[str] # 연결된 pdf 경로(상대/표시용)
+    meta_source: str # metadata txt 경로
+    content_source: Optional[str] # 연결된 pdf 경로
 
 
 class CardService:
-    """
-    data/metadata 의 txt(JSON)들을 읽어서 '문서 카드' Document를 만든다.
-    - doc_id: 원문(pdf)과 연결되는 키
-    - content_source: 해당 카드가 가리키는 원문(pdf) 파일(가능하면 자동 매칭)
-    """
-
     def __init__(self, data_dir: str = "./data"):
         self.data_dir = data_dir
         self.content_dir = os.path.join(data_dir, "content")
         self.meta_dir = os.path.join(data_dir, "metadata")
 
-    def _list_files(self, root: str, exts: Tuple[str, ...]) -> List[str]:
+    def _file_list(self, root: str, exts: Tuple[str, ...]) -> List[str]:
         out: List[str] = []
         if not os.path.exists(root):
             return out
@@ -74,10 +67,7 @@ class CardService:
         return out
 
     def _build_pdf_index(self) -> List[Tuple[str, str]]:
-        """
-        return: [(normalized_filename, relpath_from_data), ...]
-        """
-        pdfs = self._list_files(self.content_dir, (".pdf",))
+        pdfs = self._file_list(self.content_dir, (".pdf",))
         idx: List[Tuple[str, str]] = []
         for p in pdfs:
             rel = os.path.relpath(p, self.data_dir).replace("\\", "/")
@@ -85,23 +75,18 @@ class CardService:
         return idx
 
     def _match_pdf_by_meta_filename(self, meta_path: str, pdf_index: List[Tuple[str, str]]) -> Optional[str]:
-        """
-        '교육규정 메타데이터.txt' -> '교육규정' 같은 키로 pdf 파일명에 포함된 것을 찾아 매칭.
-        """
         meta_stem = _safe_stem(meta_path)
         meta_stem = meta_stem.replace("메타데이터", "").strip()
         key = _normalize(meta_stem)
         if not key:
             return None
 
-        # 1) 포함 매칭 (가장 단순/강력)
         candidates = []
         for norm_name, rel in pdf_index:
             if key in norm_name:
                 candidates.append((len(norm_name), rel))
 
         if candidates:
-            # 가장 짧은 파일명(보통 더 직접 매칭) 우선
             candidates.sort(key=lambda x: x[0])
             return candidates[0][1]
 
@@ -109,7 +94,7 @@ class CardService:
 
     def load_cards(self) -> List[CardRecord]:
         pdf_index = self._build_pdf_index()
-        meta_files = self._list_files(self.meta_dir, (".txt",))
+        meta_files = self._file_list(self.meta_dir, (".txt",))
 
         cards: List[CardRecord] = []
         for mp in meta_files:
@@ -135,8 +120,6 @@ class CardService:
             if not isinstance(keywords, list):
                 keywords = []
 
-            # doc_id는 "metadata 파일 stem" 기반으로 안정적으로 생성
-            # (원문 파일명은 바뀔 수 있어도, 카드 파일명이 기준이 되면 운영이 편함)
             meta_stem = _safe_stem(mp).replace("메타데이터", "").strip()
             doc_id = _normalize(meta_stem) or _normalize(title) or _normalize(os.path.basename(mp))
 

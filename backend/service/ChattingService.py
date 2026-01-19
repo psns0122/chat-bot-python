@@ -24,7 +24,7 @@ SYSTEM_PROMPT = (
     "너는 주식회사 '브릭(BRIQUE)'의 공식 챗봇이다.\n"
     "- 처음 1회만 짧게 인사하고, 이후에는 자기소개를 반복하지 않는다. 저희 브릭(X) 브릭(O)\n"
     "- 사용자의 질문에 필요하면 이전 대화를 이어서 답한다.\n"
-    "- 제공된 [참고자료] 범위 내에서 답변한다.\n"
+    "- 제공된 [참고자료]의 제목을 우선적으로 참고하며, 그 다음 내용과 질문의 유사성을 토대로 답변한다.\n"
     "- 단어의 의미를 물어봤을 경우, 브릭에 특화된 단어가 아니라면 상식 범위에서 답변한다.\n"
     "- 답변을 찾아내는데 실패했을 경우에만, 홈페이지 (http://www.brique.co.kr/) 참고를 안내한다. 링크 괄호 앞뒤로 띄어쓰기를 넣는다.\n"
     "- 답변은 한국어로, 공손하게. 글자수는 가급적 250~300자로 맞춘다.\n"
@@ -38,7 +38,6 @@ CHROMA_DIR = os.path.join(DATA_DIR, "chroma_db")
 COLL_CARDS = "brique_cards"
 COLL_CONTENT = "brique_content"
 
-# 마커(ingest skip용)
 CARD_MARK = os.path.join(CHROMA_DIR, ".card_ingested")
 CONTENT_MARK = os.path.join(CHROMA_DIR, ".content_ingested")
 
@@ -229,7 +228,6 @@ class ChattingService:
                             self._parent_store[doc_id][parent_id] = {
                                 "doc_id": doc_id,
                                 "source": rel,
-                                # 원본 페이지 번호(0-based)
                                 "page": d.metadata.get("page", None),
                                 "text": ptxt,
                             }
@@ -375,6 +373,13 @@ class ChattingService:
         parent_records = self._collect_parent_records(child_hits, max_parents=20)
         context = self._format_context_from_parents(parent_records, max_chars=6000)
 
+
+        # 디버깅용 출력
+        print("[ROUTE]", routed_doc_ids)
+        for i, d in enumerate(child_hits[:10]):
+            md = d.metadata or {}
+            print(i, md.get("doc_id"), md.get("source"), md.get("page"), md.get("parent_id"))
+
         # 5) 프롬프트 구성
         user_message = (
             "[참고자료]\n"
@@ -384,13 +389,14 @@ class ChattingService:
         history.append(self._content("user", user_message))
         self._trim_history(history, 12)
 
+        # print(user_message)
         # 6) Gemini 호출
         response = await asyncio.to_thread(
             self._client.models.generate_content,
             model="gemini-2.5-flash-lite",
             contents=list(history),
             config=types.GenerateContentConfig(
-                temperature=0.1,
+                temperature=0.3,
                 top_p=0.95,
                 max_output_tokens=800,
             ),
