@@ -385,12 +385,11 @@ class ChattingService:
         parent_records = self._collect_parent_records(child_hits, max_parents=20)
         context = self._format_context_from_parents(parent_records, max_chars=6000)
 
-
         # 디버깅용 출력
-        print("[ROUTE]", routed_doc_ids)
-        for i, d in enumerate(child_hits[:10]):
-            md = d.metadata or {}
-            print(i, md.get("doc_id"), md.get("source"), md.get("page"), md.get("parent_id"))
+        # print("[ROUTE]", routed_doc_ids)
+        # for i, d in enumerate(child_hits[:10]):
+        #     md = d.metadata or {}
+        #     print(i, md.get("doc_id"), md.get("source"), md.get("page"), md.get("parent_id"))
 
         # 5) 프롬프트 구성
         user_message = (
@@ -450,7 +449,7 @@ class ChattingService:
         for root, _, names in os.walk(file_dir):
             for name in names:
                 lower = name.lower()
-                if lower.endswith(".pdf") or lower.endswith(".txt"):
+                if lower.endswith(".pdf"):
                     full = os.path.join(root, name)
                     rel = os.path.relpath(full, file_dir)
                     files.append(
