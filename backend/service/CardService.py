@@ -143,12 +143,16 @@ class CardService:
     def to_documents(self, cards: List[CardRecord]) -> List[Document]:
         docs: List[Document] = []
         for c in cards:
-            # 카드 텍스트(라우팅용)
+            title_norm = _normalize(c.title)
+            keywords_norm_list = [_normalize(k) for k in c.keywords if _normalize(k)]
+            keywords_norm_str = " ".join(keywords_norm_list)  # ✅ list -> str
+
             card_text = (
-                f"TITLE: {c.title}\n"
-                f"DESCRIPTION: {c.description}\n"
-                f"EXPECTED_QUESTIONS:\n- " + "\n- ".join(c.expected_q[:30]) + "\n"
-                f"KEYWORDS:\n- " + "\n- ".join(c.keywords[:80])
+                    f"TITLE: {c.title}\n"
+                    f"DESCRIPTION: {c.description}\n"
+                    f"EXPECTED_QUESTIONS:\n- " + "\n- ".join(c.expected_q[:30]) + "\n"
+                                                                                  f"KEYWORDS:\n- " + "\n- ".join(
+                c.keywords[:80])
             ).strip()
 
             docs.append(
@@ -160,6 +164,8 @@ class CardService:
                         "meta_source": c.meta_source,
                         "content_source": c.content_source or "",
                         "title": c.title,
+                        "title_norm": title_norm,  # ✅ str
+                        "keywords_norm": keywords_norm_str,  # ✅ str (절대 list 금지)
                     },
                 )
             )

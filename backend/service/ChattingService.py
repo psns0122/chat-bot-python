@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Deque, Dict, Any, List, Optional, Set
+from typing import Deque, Dict, Any, List, Optional, Set, Tuple
 from collections import deque
 import asyncio
 import os
@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 
 from backend.core.config import GOOGLE_API_KEY
-from backend.service.CardService import CardService, CardRecord
+from backend.service.CardService import CardService, CardRecord, _normalize
 
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -261,88 +261,100 @@ class ChattingService:
                     print("[INGEST] content empty (data/content 확인 필요)")
 
     # ---------- Retrieval ----------
-    async def _route_docs_by_cards(self, query: str, k_cards: int = 4) -> List[str]:
-        """
-        1차: 카드 벡터스토어에서 doc_id 후보를 뽑는다.
-        """
-        try:
-            card_hits: List[Document] = await asyncio.to_thread(self._vs_cards.similarity_search, query, k_cards)
-        except Exception:
-            return []
+    async def _route_docs_by_cards(self, query: str, k_cards: int = 8) -> List[str]:
+        hits = await asyncio.to_thread(self._vs_cards.similarity_search_with_score, query, k_cards)
 
-        doc_ids: List[str] = []
-        seen: Set[str] = set()
-        for d in card_hits:
-            did = (d.metadata or {}).get("doc_id")
-            did = (did or "").strip()
-            if did and did not in seen:
+        q = _normalize(query)
+        q_tokens = set(q.split())
+
+        scored: List[Tuple[str, float]] = []
+        for doc, score in hits:
+            md = doc.metadata or {}
+            did = (md.get("doc_id") or "").strip()
+            if not did:
+                continue
+
+            title_norm = md.get("title_norm") or _normalize(md.get("title") or "")
+            kw_norm = set((md.get("keywords_norm") or "").split())
+
+            boost = 0.0
+            # 타이틀 직접 매칭
+            if any(t in title_norm for t in q_tokens):
+                boost += 0.25
+            # 키워드 매칭
+            for t in q_tokens:
+                if t and any(t == k for k in kw_norm):
+                    boost += 0.05
+            boost = min(boost, 0.35)
+
+            # score가 거리면 낮을수록 좋으니 "score - boost"로 개선
+            scored.append((did, score - boost))
+
+        scored.sort(key=lambda x: x[1])
+        out, seen = [], set()
+        for did, _ in scored:
+            if did not in seen:
                 seen.add(did)
-                doc_ids.append(did)
-        return doc_ids
+                out.append(did)
+        return out[:4]
 
     async def _search_content(self, query: str, doc_ids: Optional[List[str]] = None, k: int = 12) -> List[Document]:
-        """
-        2차: 내용 벡터스토어 검색
-        - doc_ids가 있으면 각 doc_id별로 검색해서 합친 뒤 상위 k개를 사용
-        (Chroma $in 필터가 환경에 따라 내부 에러를 내는 경우가 있어 안전하게 구현)
-        """
         if doc_ids:
-            merged: List[Document] = []
-            # doc별로 조금씩만 뽑아서 합침 (전체 k보다 약간 크게)
-            per_k = max(3, (k // max(1, len(doc_ids))) + 2)
+            merged: List[Tuple[Document, float]] = []
+            per_k = max(3, (k // max(1, len(doc_ids))) + 6)
 
             for did in doc_ids:
                 try:
                     hits = await asyncio.to_thread(
-                        self._vs_content.similarity_search,
+                        self._vs_content.similarity_search_with_score,
                         query,
                         per_k,
-                        filter={"doc_id": did},  # 단일 값 필터는 안정적으로 동작
+                        filter={"doc_id": did},
                     )
                     merged.extend(hits)
                 except Exception:
-                    # 특정 doc_id만 필터가 깨져도 전체 실패하지 않게
                     continue
 
-            # 중복 제거(동일 parent_id 기준)
-            seen = set()
-            uniq: List[Document] = []
-            for d in merged:
-                pid = (d.metadata or {}).get("parent_id")
-                key = pid or (d.page_content[:80] + str(d.metadata))
-                if key in seen:
-                    continue
-                seen.add(key)
-                uniq.append(d)
+            # score 정렬: Chroma는 보통 "거리(distance)"라서 낮을수록 좋을 수 있음.
+            # 일단 오름차순 정렬로 시작하고, 결과가 이상하면 내림차순으로 바꿔.
+            merged.sort(key=lambda x: x[1])
 
-            return uniq[:k]
+            # parent_id 기준 중복 제거(더 좋은 점수 유지)
+            best: Dict[str, Tuple[Document, float]] = {}
+            for d, s in merged:
+                pid = (d.metadata or {}).get("parent_id") or d.page_content[:80]
+                if pid not in best or s < best[pid][1]:
+                    best[pid] = (d, s)
 
-        # 필터 없이 전체 검색
-        return await asyncio.to_thread(self._vs_content.similarity_search, query, k)
+            return [ds[0] for ds in list(best.values())[:k]]
 
-    def _collect_parent_records(self, child_docs: List[Document], max_parents: int = 6) -> List[Dict[str, Any]]:
-        """
-        검색된 child들의 parent_id를 모아서 parent_store에서 parent 텍스트를 복원한다.
-        """
-        parent_ids: List[str] = []
+        hits = await asyncio.to_thread(self._vs_content.similarity_search_with_score, query, k)
+        hits.sort(key=lambda x: x[1])
+        return [d for d, _ in hits]
+
+    def _collect_parent_records(self, child_docs: List[Document], max_parents: int = 6, per_doc: int = 3) -> List[
+        Dict[str, Any]]:
+        picked: Dict[str, int] = {}
         seen: Set[str] = set()
+        parents: List[Dict[str, Any]] = []
 
         for d in child_docs:
-            pid = (d.metadata or {}).get("parent_id")
-            did = (d.metadata or {}).get("doc_id")
-            if not pid or not did:
+            md = d.metadata or {}
+            did, pid = md.get("doc_id"), md.get("parent_id")
+            if not did or not pid:
                 continue
-            key = f"{did}:{pid}"
-            if key not in seen:
-                seen.add(key)
-                parent_ids.append(key)
+            if picked.get(did, 0) >= per_doc:
+                continue
 
-        parents: List[Dict[str, Any]] = []
-        for key in parent_ids:
-            did, pid = key.split(":", 1)
+            key = f"{did}:{pid}"
+            if key in seen:
+                continue
+            seen.add(key)
+
             rec = (self._parent_store.get(did) or {}).get(pid)
             if rec:
                 parents.append(rec)
+                picked[did] = picked.get(did, 0) + 1
             if len(parents) >= max_parents:
                 break
 
@@ -363,11 +375,11 @@ class ChattingService:
         routed_doc_ids = await self._route_docs_by_cards(user_input, k_cards=4)
 
         # 3) 2차 검색(내용) - doc_id 필터
-        child_hits = await self._search_content(user_input, doc_ids=routed_doc_ids, k=60)
+        child_hits = await self._search_content(user_input, doc_ids=routed_doc_ids, k=36)
 
         # doc_id 필터 결과가 너무 약하면(0개) 전체에서 fallback
         if not child_hits:
-            child_hits = await self._search_content(user_input, doc_ids=None, k=60)
+            child_hits = await self._search_content(user_input, doc_ids=None, k=36)
 
         # 4) Parent 복원(문맥)
         parent_records = self._collect_parent_records(child_hits, max_parents=20)
